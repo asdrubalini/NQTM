@@ -17,8 +17,8 @@
         devShells.default = pkgs.mkShell {
           buildInputs = [
             (pkgs.python36.withPackages (ps: with ps; [
+              tensorflowWithCuda
               numpy
-              tensorflow
               scikitlearn
             ]))
           ];
