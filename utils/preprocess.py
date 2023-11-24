@@ -21,7 +21,7 @@ bow_matrix = vectorizer.fit_transform(texts).toarray()
 idx = np.where(bow_matrix.sum(axis=-1) > 0)
 bow_matrix = bow_matrix[idx]
 
-vocab = vectorizer.get_feature_names()
+vocab = vectorizer.get_feature_names_out()
 
 print("===>saving files")
 
