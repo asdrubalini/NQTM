@@ -34,10 +34,23 @@
         "type": "github"
       }
     },
+    "nixpkgs-nvidia": {
+      "locked": {
+        "lastModified": 1663719720,
+        "narHash": "sha256-JMGjSp6gV2Yuu8gcazb5PWY/hw29DKg3gFMtzQgQ828=",
+        "type": "tarball",
+        "url": "https://github.com/nixos/nixpkgs/archive/0fdc7224a24203d9489bc52892e3d6121cacb110.tar.gz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://github.com/nixos/nixpkgs/archive/0fdc7224a24203d9489bc52892e3d6121cacb110.tar.gz"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "nixpkgs-nvidia": "nixpkgs-nvidia"
       }
     },
     "systems": {
