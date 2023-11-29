@@ -23,7 +23,7 @@ bow_matrix = bow_matrix[idx]
 
 print(bow_matrix)
 
-vocab = vectorizer.get_feature_names_out()
+vocab = vectorizer.get_feature_names()
 
 # print(f"===>saving files {vocab}")
 

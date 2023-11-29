@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-20.03";
-    nixpkgs-nvidia.url = "https://github.com/nixos/nixpkgs/archive/ace5093e36ab1e95cb9463863491bee90d5a4183.tar.gz";
+    nixpkgs-nvidia.url = "https://github.com/nixos/nixpkgs/archive/8a67cfb4d9d774be3c6050c2be43ed91513d19be.tar.gz";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -48,17 +48,6 @@
       {
         devShells.default = pkgs.mkShell {
 	        name = "NQTM-dev";
-          inherit buildInputs;
-          inherit shellHook;
-        };
-
-        packages.default = pkgs.stdenv.mkDerivation {
-          name = "NQTM";
-          # src = ./.;
-
-          unpackPhase = "true";
-          buildPhase = "true";
-          installPhase = "mkdir -p $out";
 
           inherit buildInputs;
           inherit shellHook;

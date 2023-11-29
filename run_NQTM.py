@@ -91,6 +91,8 @@ def train(model, train_data, vocab, config):
 
 
 if __name__ == "__main__":
+    tf.compat.v1.random.set_random_seed(42)
+
     config = dict()
     config.update(vars(args))
     config['active_fct'] = tf.nn.softplus
