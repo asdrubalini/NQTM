@@ -4,9 +4,9 @@ import numpy as np
 import scipy.sparse
 import tensorflow as tf
 import os
-import pickle
 import argparse
 from NQTM import NQTM
+import wandb
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', required=True)
@@ -66,21 +66,34 @@ def get_theta(model, x):
     return train_theta
 
 
-def train(model, train_data, vocab, config):
+def train(model: NQTM, train_data, vocab, config: dict):
     total_batch = int(train_data.shape[0] / args.batch_size)
     minibatches = create_minibatch(train_data)
     op = [model.train_op, model.loss]
 
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="NQTM-v2",
+
+        # track hyperparameters and run metadata with wandb.config
+        config=config
+    )
+
+    dist = tf.compat.v1.placeholder(tf.float32, [100])
+    tf.compat.v1.summary.histogram(name="distribution", values=dist)
+    writer = tf.compat.v1.summary.FileWriter("/tmp/tf1_summary_example")
+
     for epoch in range(args.epoch):
         omega = 0 if epoch < config['word_sample_epoch'] else 1.0
         train_loss = list()
+
         for i in range(total_batch):
             batch_data = minibatches.__next__()
             feed_dict = {model.x: batch_data, model.w_omega: omega}
             _, batch_loss = model.sess.run(op, feed_dict=feed_dict)
             train_loss.append(batch_loss)
 
-        print('Epoch: ', '{:03d} loss: {:.3f}'.format(epoch + 1, np.mean(train_loss)))
+        print('Epoch: {:03d} loss: {:.3f}'.format(epoch + 1, np.mean(train_loss)))
 
     beta = model.sess.run((model.beta))
     print_top_words(beta, vocab)
@@ -91,9 +104,13 @@ def train(model, train_data, vocab, config):
 
 
 if __name__ == "__main__":
+    tf.compat.v1.disable_eager_execution()
+    tf.compat.v1.disable_v2_behavior()
+    tf.compat.v1.disable_resource_variables()
+
     config = dict()
     config.update(vars(args))
-    config['active_fct'] = tf.nn.softplus
+    config['active_fct'] = tf.compat.v1.nn.softplus
 
     os.makedirs(args.output_dir, exist_ok=True)
 
