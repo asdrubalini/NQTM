@@ -7,6 +7,9 @@ name = "pypi"
 tensorflow = "*"
 numpy = "*"
 scikit-learn = "*"
+keras = "*"
+tensorflow-macos = "*"
+tensorflow-metal = "*"
 
 [dev-packages]
 

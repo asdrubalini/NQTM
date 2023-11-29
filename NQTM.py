@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import tf_slim as slim
+from keras.layers import BatchNormalization
 
 
 def xavier_init(fan_in, fan_out, constant=1):
@@ -122,13 +122,13 @@ class NQTM(object):
         layer_1 = self.active_fct(tf.add(tf.matmul(x, weights['h1']), biases['b1']))
         layer_2 = self.active_fct(tf.add(tf.matmul(layer_1, weights['h2']), biases['b2']))
         layer_do = tf.nn.dropout(layer_2, rate=1 - (self.keep_prob))
-        z_mean = slim.batch_norm(tf.add(tf.matmul(layer_do, weights['out']), biases['out']))
+        z_mean = BatchNormalization()(tf.add(tf.matmul(layer_do, weights['out']), biases['out']))
 
         theta = tf.nn.softmax(z_mean)
         return theta
 
     def decoder(self, theta):
-        x_recon = slim.batch_norm(tf.add(tf.matmul(theta, self.network_weights["weights_gener"]['h2']), 0.0))
+        x_recon = BatchNormalization()(tf.add(tf.matmul(theta, self.network_weights["weights_gener"]['h2']), 0.0))
         x_recon = tf.nn.softmax(x_recon)
         return x_recon
 
