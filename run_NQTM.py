@@ -4,7 +4,6 @@ import numpy as np
 import scipy.sparse
 import tensorflow as tf
 import os
-import pickle
 import argparse
 from NQTM import NQTM
 
@@ -91,6 +90,8 @@ def train(model, train_data, vocab, config):
 
 
 if __name__ == "__main__":
+    tf.compat.v1.disable_eager_execution()
+
     config = dict()
     config.update(vars(args))
     config['active_fct'] = tf.nn.softplus
