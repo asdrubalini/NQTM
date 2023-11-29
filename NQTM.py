@@ -8,13 +8,17 @@ import pickle
 
 
 def xavier_init(fan_in, fan_out, constant=1):
+    print(f'xavier_init: {fan_in}, {fan_out}, {constant}')
+
     low = -constant*np.sqrt(6.0/(fan_in + fan_out))
     high = constant*np.sqrt(6.0/(fan_in + fan_out))
     return tf.random_uniform((fan_in, fan_out), minval=low, maxval=high, dtype=tf.float32)
 
 
 class TopicDisQuant(object):
-    def __init__(self, embedding_dim, num_embeddings, commitment_cost):
+    def __init__(self, embedding_dim: int, num_embeddings: int, commitment_cost: float):
+        print(f'TopicDisQuant.__init__: {embedding_dim}, {num_embeddings}, {commitment_cost}')
+
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
         self.commitment_cost = commitment_cost
@@ -29,6 +33,8 @@ class TopicDisQuant(object):
             self._E = e1
 
     def forward(self, inputs):
+        print(f'TopicDisQuant.forward: {inputs}')
+
         input_shape = tf.shape(inputs)
         with tf.control_dependencies([tf.Assert(tf.equal(input_shape[-1], self.embedding_dim), [input_shape])]):
             flat_inputs = tf.reshape(inputs, [-1, self.embedding_dim])
@@ -58,6 +64,8 @@ class TopicDisQuant(object):
             }
 
     def quantize(self, encoding_indices):
+        print(f'TopicDisQuant.quantize: {encoding_indices}')
+
         return tf.nn.embedding_lookup(self._E, encoding_indices, validate_indices=False)
 
 

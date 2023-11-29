@@ -8,4 +8,7 @@ evaluate:
 	python utils/TU.py --data_path output/top_words_T15_K50_1th
 
 develop:
-	NIXPKGS_ALLOW_UNFREE=1 nix develop --impure
+	nix develop ".#devShells.x86_64-linux.default"
+
+store:
+	nix-store -qR $(nix path-info ".#devShells.x86_64-linux.default")

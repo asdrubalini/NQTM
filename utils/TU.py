@@ -10,7 +10,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def TU_eva(texts):
+def TU_eva(texts) -> float:
     K = len(texts)
     T = len(texts[0].split())
     vectorizer = CountVectorizer()

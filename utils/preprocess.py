@@ -21,9 +21,11 @@ bow_matrix = vectorizer.fit_transform(texts).toarray()
 idx = np.where(bow_matrix.sum(axis=-1) > 0)
 bow_matrix = bow_matrix[idx]
 
-vocab = vectorizer.get_feature_names()
+print(bow_matrix)
 
-print("===>saving files")
+vocab = vectorizer.get_feature_names_out()
+
+# print(f"===>saving files {vocab}")
 
 os.makedirs(args.output_dir, exist_ok=True)
 

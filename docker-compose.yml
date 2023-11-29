@@ -1,0 +1,17 @@
+version: '3'
+
+services:
+  test:
+    image: tensorflow/tensorflow:latest-gpu
+    # image: tensorflow/tensorflow:1.15.5-gpu
+    # command: nvidia-smi
+    volumes:
+      - '.:/src/'
+    # command: python -c "import tensorflow as tf; import sys; print(sys.version_info); print(tf.__version__)"
+    command: sleep infinity
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            capabilities: [gpu]

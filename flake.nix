@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-20.03";
-    nixpkgs-nvidia.url = "https://github.com/nixos/nixpkgs/archive/0fdc7224a24203d9489bc52892e3d6121cacb110.tar.gz";
+    nixpkgs-nvidia.url = "https://github.com/nixos/nixpkgs/archive/ace5093e36ab1e95cb9463863491bee90d5a4183.tar.gz";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -12,28 +12,56 @@
       let
         pkgs = import nixpkgs {
           inherit system;
+
+          config = {
+            allowUnfree = true;
+            cudaSupport = true;
+          };
         };
 
         pkgs-nvidia = import nixpkgs-nvidia {
           inherit system;
+
+          config = {
+            allowUnfree = true;
+            cudaSupport = true;
+          };
         };
+
+        buildInputs = [
+          (pkgs.python36.withPackages (ps: with ps; [
+            tensorflowWithCuda
+            numpy
+            scikitlearn
+          ]))
+        ];
+
+        shellHook = ''
+          echo "Fasten your seatbelt"
+          export CUDA_PATH=${pkgs-nvidia.cudatoolkit}
+          export LD_LIBRARY_PATH=${pkgs-nvidia.linuxPackages.nvidia_x11}/lib:${pkgs-nvidia.ncurses5}/lib
+          export EXTRA_LDFLAGS="-L/lib -L${pkgs-nvidia.linuxPackages.nvidia_x11}/lib"
+          export EXTRA_CCFLAGS="-I/usr/include"
+        '';
+
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = [
-            (pkgs.python36.withPackages (ps: with ps; [
-              tensorflowWithCuda
-              numpy
-              scikitlearn
-            ]))
-          ];
+	        name = "NQTM-dev";
+          inherit buildInputs;
+          inherit shellHook;
+        };
 
-          shellHook = ''
-            export CUDA_PATH=${pkgs-nvidia.cudatoolkit}
-            export LD_LIBRARY_PATH=${pkgs-nvidia.linuxPackages.nvidia_x11}/lib:${pkgs-nvidia.ncurses5}/lib
-            export EXTRA_LDFLAGS="-L/lib -L${pkgs-nvidia.linuxPackages.nvidia_x11}/lib"
-            export EXTRA_CCFLAGS="-I/usr/include"
-          '';
+        packages.default = pkgs.stdenv.mkDerivation {
+          name = "NQTM";
+          # src = ./.;
+
+          unpackPhase = "true";
+          buildPhase = "true";
+          installPhase = "mkdir -p $out";
+
+          inherit buildInputs;
+          inherit shellHook;
         };
       }
     );
