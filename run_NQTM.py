@@ -79,7 +79,7 @@ def train(model, train_data, vocab, config):
             _, batch_loss = model.sess.run(op, feed_dict=feed_dict)
             train_loss.append(batch_loss)
 
-        print('Epoch: ', '{:03d} loss: {:.3f}'.format(epoch + 1, np.mean(train_loss)))
+        print('Epoch: {:03d} loss: {:.3f}'.format(epoch + 1, np.mean(train_loss)))
 
     beta = model.sess.run((model.beta))
     print_top_words(beta, vocab)
