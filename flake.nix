@@ -47,19 +47,7 @@
       in
       {
         devShells.default = pkgs.mkShell {
-	        name = "NQTM-dev";
-          inherit buildInputs;
-          inherit shellHook;
-        };
-
-        packages.default = pkgs.stdenv.mkDerivation {
-          name = "NQTM";
-          # src = ./.;
-
-          unpackPhase = "true";
-          buildPhase = "true";
-          installPhase = "mkdir -p $out";
-
+	        name = "NQTM";
           inherit buildInputs;
           inherit shellHook;
         };

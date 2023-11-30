@@ -21,8 +21,6 @@ bow_matrix = vectorizer.fit_transform(texts).toarray()
 idx = np.where(bow_matrix.sum(axis=-1) > 0)
 bow_matrix = bow_matrix[idx]
 
-print(bow_matrix)
-
 vocab = vectorizer.get_feature_names_out()
 
 # print(f"===>saving files {vocab}")
@@ -34,4 +32,4 @@ with open(os.path.join(args.output_dir, 'vocab.txt'), 'w') as file:
     for line in vocab:
         file.write(line + '\n')
 
-print('===>done.')
+print('done')

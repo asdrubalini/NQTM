@@ -8,7 +8,7 @@ tensorflow = "*"
 numpy = "*"
 scikit-learn = "*"
 keras = "*"
-tensorflow-macos = "*"
+# tensorflow-macos = "*"
 tensorflow-metal = "*"
 wandb = "*"
 
