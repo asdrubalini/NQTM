@@ -1,0 +1,10 @@
+* TODO
+
+** NQTM::TopicDisQuant
+*** alcuni valori in forward non vengnono mai letti:
+**** encodings
+**** e_latent_loss
+**** q_latent_loss
+
+*** `quantized` ha gli stessi identici valori per ogni row
+

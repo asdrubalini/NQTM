@@ -8,174 +8,236 @@ import functools
 import json
 from json import JSONEncoder
 import types
+import sys
+import inspect
+import os
+import unittest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-file_handler = logging.FileHandler('trace.log', mode='w')
-logger.addHandler(file_handler)
+# file_handler = logging.FileHandler('trace.log', mode='w')
+# logger.addHandler(file_handler)
+logger.addHandler(logging.StreamHandler(sys.stdout))
+
 
 class DefaultEncoder(JSONEncoder):
     def default(self, obj):
         # return type(obj)
         # if tf.is_tensor(obj) or tf.is_symbolic_tensor(obj):
-            # return 'tf.Tensor'
+        # return 'tf.Tensor'
 
         if isinstance(obj, NQTM) or isinstance(obj, TopicDisQuant):
             return dict(obj.__dict__.items())
 
         elif isinstance(obj, types.FunctionType):
-            return 'function'
+            return "function"
 
         elif tf.is_tensor(obj):
-            return 'tf.Tensor'
+            # return 'tf.Tensor'
 
-            session = tf.compat.v1.get_default_session()
-            return "session: " + str(type(session))
+            # init_op = tf.compat.v1.global_variables_initializer()
+
+            # try:
+            # with tf.compat.v1.Session() as sess:
+            # # sess.run(init_op)
+            # # Evaluate the tensor to get its values
+            # tensor = sess.run(obj)
+            # except:
+            # return {'type': 'tf.Tensor'}
+
+            # Get tensor details
+            shape = obj.shape
+            data_type = obj.dtype
+
+            return {
+                "type": "tf.Tensor",
+                "shape": str(shape),
+                "dtype": str(data_type),
+            }
+
+            # session = tf.compat.v1.get_default_session()
+            # return "session: " + str(type(session))
             # return str(type(tf.compat.v1.get_default_session().run(obj)))
 
-            tensor_shape = obj.shape.as_list()
+            try:
+                tensor_shape = obj.shape.as_list()
+            except ValueError:
+                return {"type": "tf.Tensor"}
 
-            if hasattr(obj, 'numpy'):
+            try:
                 # EagerTensor: Serialize the values
                 tensor_value = obj.numpy().tolist()
-                return {'value': tensor_value, 'shape': tensor_shape}
-            else:
-                # SymbolicTensor: Serialize only the shape
-                return {'shape': tensor_shape}
+                return {
+                    "type": "tf.Tensor",
+                    "value": tensor_value,
+                    "shape": tensor_shape,
+                }
+
+            except (ValueError, AttributeError):
+                return {"type": "tf.Tensor", "shape": tensor_shape}
 
         elif isinstance(obj, tf.Variable):
-            return obj.value() # Returns a tf.Tensor
-            return 'tf.Variable'
+            return obj.value()  # Returns a tf.Tensor
+            return "tf.Variable"
 
         elif dataclasses.is_dataclass(obj):
-            return 'DataClass'
+            return "DataClass"
             return dict(dataclasses.asdict(obj))
-        
+
         try:
             return json.JSONEncoder.default(self, obj)
         except:
-            return 'TypeError'
+            return "TypeError"
 
 
 def log_arguments(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        arg_names = func.__code__.co_varnames[:func.__code__.co_argcount]
+        arg_names = func.__code__.co_varnames[: func.__code__.co_argcount]
         arguments = dict(zip(arg_names, args))
         arguments.update(kwargs)
 
-        if args and hasattr(args[0], '__class__'):
+        if args and hasattr(args[0], "__class__"):
             class_name = args[0].__class__.__name__
-            caller = f'{class_name}::{func.__name__}'
+            caller = f"{class_name}::{func.__name__}"
         else:
             caller = func.__name__
 
-        logger.debug(json.dumps({
-            'caller': caller,
-            'arguments': arguments,
-        }, cls=DefaultEncoder))
+        logger.error(
+            json.dumps(
+                {
+                    "caller": caller,
+                    "arguments": arguments,
+                },
+                cls=DefaultEncoder,
+            )
+        )
 
         ret = func(*args, **kwargs)
 
-        logger.debug(json.dumps({
-            'caller': caller,
-            'return': ret,
-        }, cls=DefaultEncoder))
+        logger.error(
+            json.dumps(
+                {
+                    "caller": caller,
+                    "return": ret,
+                },
+                cls=DefaultEncoder,
+            )
+        )
 
         return ret
 
     return wrapper
 
 
-# def log_arguments(func):
-    # @functools.wraps(func)
-    # def wrapper(*args, **kwargs):
-        # arg_names = func.__code__.co_varnames[:func.__code__.co_argcount]
-        # arguments = dict(zip(arg_names, args))
-        # arguments.update(kwargs)
+def tf_debug(tensor: tf.Tensor, name: str) -> tf.Tensor:
+    return tensor
+    if not os.getenv("DEBUG") and not name.startswith("keep."):
+        return tensor
 
-        # if args and hasattr(args[0], '__class__'):
-            # class_name = args[0].__class__.__name__
-            # pre = f'$ {class_name}::{func.__name__}():'
-        # else:
-            # pre = f'$ {func.__name__}():'
+    function = inspect.stack()[1].function
 
-        # arguments_str = '\n'.join([f'{name}: {value}' for name, value in arguments.items()])
-        # logger.debug(f"{pre} arguments: \n{arguments_str}\n")
+    j = {"caller": function, "name": name}
+    print_op = tf.compat.v1.print(json.dumps(j), tensor, output_stream=sys.stdout, summarize=-1, sep="\n")
 
-        # ret = func(*args, **kwargs)
+    # Ensure that print_op is executed
+    with tf.control_dependencies([print_op]):
+        # The operation to ensure print_op executes
+        tensor = tf.identity(tensor)
 
-        # ret_str = str(ret)  # Convert the return value to string
-        # logger.debug(f"{pre} ret - {ret_str}\n")
+    return tensor
 
-        # return ret
-
-    # return wrapper
 
 @dataclass
 class TopicDisQuantForwardResult:
     quantize: tf.Tensor
-    loss: tf.Tensor
+    loss: float
     encodings: tf.Tensor
     e_latent_loss: tf.Tensor
     q_latent_loss: tf.Tensor
 
+
 @log_arguments
 def xavier_init(fan_in: int, fan_out: int, constant: float = 1.0) -> tf.Tensor:
-    # logger.debug(f'fan_in = {fan_in}, fan_out = {fan_out}, constant = {constant}')
-
-    low = -constant*np.sqrt(6.0/(fan_in + fan_out))
-    high = constant*np.sqrt(6.0/(fan_in + fan_out))
+    low = -constant * np.sqrt(6.0 / (fan_in + fan_out))
+    high = constant * np.sqrt(6.0 / (fan_in + fan_out))
     ret = tf.random.uniform((fan_in, fan_out), minval=low, maxval=high, dtype=tf.float32)
 
-    # logger.debug('ret =', ret)
+    return tf_debug(ret, "xavier_out")
 
-    return ret
 
 class TopicDisQuant(object):
     @log_arguments
     def __init__(self, embedding_dim: int, num_embeddings: int, commitment_cost: float):
         # Initialization method for the TopicDisQuant class. It sets up the basic parameters
         # and initializes the embeddings.
-        # logger.debug(f'embedding_dim = {embedding_dim}, num_embeddings = {num_embeddings}, commitment_cost = {commitment_cost}')
 
         self.embedding_dim = embedding_dim  # Dimension of each embedding vector
         self.num_embeddings = num_embeddings  # Total number of discrete embeddings
         self.commitment_cost = commitment_cost  # Cost for embedding commitment used in loss calculation
 
-        initializer = tf.compat.v1.uniform_unit_scaling_initializer()  # Initializer for the embeddings
-        e1: tf.Variable = tf.compat.v1.Variable(tf.compat.v1.eye(embedding_dim, name='embedding'), trainable=True)  # Basic identity matrix for embeddings
+        initializer = tf.compat.v1.initializers.variance_scaling(distribution='uniform')
+        e1: tf.Variable = tf.compat.v1.Variable(
+            tf.compat.v1.eye(embedding_dim, name="embedding"), trainable=True
+        )  # Basic identity matrix for embeddings
+
+        e1 = tf_debug(e1, "keep.e1")
 
         if num_embeddings > embedding_dim:
             # If the number of embeddings is greater than the embedding dimension, extend the embedding matrix
-            e2: tf.Variable = tf.compat.v1.get_variable('embedding', [embedding_dim, num_embeddings - embedding_dim], initializer=initializer, trainable=True)
+            e2: tf.Variable = tf.compat.v1.get_variable(
+                "embedding",
+                [embedding_dim, num_embeddings - embedding_dim],
+                initializer=initializer,
+                trainable=True,
+            )
+
+            e2 = tf_debug(e2, "keep.e2")
+
             e2: tf.Tensor = tf.compat.v1.transpose(e2)  # Transpose the extended part of the embedding matrix
-            self.maybe_embedding_matrix: tf.Variable = tf.compat.v1.Variable(tf.compat.v1.concat([e1, e2], axis=0))  # Combine the basic and extended parts of the embeddings
+            self.maybe_embedding_matrix: tf.Variable = tf.compat.v1.Variable(
+                tf.compat.v1.concat([e1, e2], axis=0)
+            )  # Combine the basic and extended parts of the embeddings
         else:
             # Use the basic identity matrix as the embedding matrix instead
             self.maybe_embedding_matrix = e1
 
+        # self.maybe_embedding_matrix = tf_debug(self.maybe_embedding_matrix, name="maybe_embedding_matrix")
+
     @log_arguments
     def forward(self, inputs: tf.Tensor) -> TopicDisQuantForwardResult:
+        inputs = tf_debug(inputs, "inputs")
+
         # The forward method computes the forward pass of the model. It calculates
         # the distances between input embeddings and a set of discrete embeddings,
         # selects the closest embeddings, and computes a quantization loss.
         # logger.debug(f'inputs = {inputs}')
 
-        input_shape = tf.compat.v1.shape(inputs)  # Get the shape of the input tensor
+        input_shape = tf.compat.v1.shape(inputs)
         # Ensure the last dimension of the input tensor matches the embedding dimension
-        with tf.compat.v1.control_dependencies([tf.compat.v1.Assert(tf.compat.v1.equal(input_shape[-1], self.embedding_dim), [input_shape])]):
+        with tf.compat.v1.control_dependencies(
+            [
+                tf.compat.v1.Assert(
+                    tf.compat.v1.equal(input_shape[-1], self.embedding_dim),
+                    [input_shape],
+                )
+            ]
+        ):
             flat_inputs = tf.compat.v1.reshape(inputs, [-1, self.embedding_dim])  # Flatten the input tensor
 
         # Calculate distances between flattened inputs and embeddings
-        distances: tf.Tensor = (tf.compat.v1.reduce_sum(flat_inputs**2, 1, keepdims=True)
-                    - 2 * tf.compat.v1.matmul(flat_inputs, tf.compat.v1.transpose(self.maybe_embedding_matrix))
-                    + tf.compat.v1.transpose(tf.compat.v1.reduce_sum(self.maybe_embedding_matrix ** 2, 1, keepdims=True)))
+        distances: tf.Tensor = (
+            tf.compat.v1.reduce_sum(flat_inputs**2, 1, keepdims=True)
+            - 2 * tf.compat.v1.matmul(flat_inputs, tf.compat.v1.transpose(self.maybe_embedding_matrix))
+            + tf.compat.v1.transpose(tf.compat.v1.reduce_sum(self.maybe_embedding_matrix**2, 1, keepdims=True))
+        )
 
         encoding_indices = tf.compat.v1.argmax(-distances, 1)  # Find the indices of closest embeddings
         encodings = tf.compat.v1.one_hot(encoding_indices, self.num_embeddings)  # Create one-hot encodings
-        encoding_indices = tf.compat.v1.reshape(tensor=encoding_indices, shape=tf.shape(inputs)[:-1])  # Reshape encoding indices to match the input shape
+        encoding_indices = tf.compat.v1.reshape(
+            tensor=encoding_indices, shape=tf.shape(inputs)[:-1]
+        )  # Reshape encoding indices to match the input shape
 
         quantized = self.quantize(encoding_indices)  # Quantize the encoding indices
 
@@ -185,6 +247,14 @@ class TopicDisQuant(object):
         loss: tf.Tensor = q_latent_loss + self.commitment_cost * e_latent_loss  # Total loss
 
         quantized: tf.Tensor = inputs + tf.compat.v1.stop_gradient(quantized - inputs)  # Update quantized embeddings
+
+        quantized = tf_debug(quantized, "quantized")
+        loss = tf_debug(loss, "loss")
+
+        # encodings = tf_debug(encodings, 'encodings')
+
+        # TODO:
+        # encodings, q_latent_loss and e_latent_loss are never used lol
 
         # Return a dictionary of the outputs including quantized embeddings and losses
         return TopicDisQuantForwardResult(
@@ -197,87 +267,262 @@ class TopicDisQuant(object):
 
     @log_arguments
     def quantize(self, encoding_indices: tf.Tensor) -> tf.Tensor:
+        encoding_indices = tf_debug(encoding_indices, "encoding_indices")
         # This method quantizes the encoding indices by looking up the corresponding embeddings.
-        #logger.debug(f'encoding_indices = {encoding_indices}')
+        # logger.debug(f'encoding_indices = {encoding_indices}')
 
         # Perform embedding lookup for the given indices
-        return tf.compat.v1.nn.embedding_lookup(self.maybe_embedding_matrix, encoding_indices, validate_indices=False)
+        ret = tf.compat.v1.nn.embedding_lookup(self.maybe_embedding_matrix, encoding_indices, validate_indices=False)
+
+        return tf_debug(ret, "quantize_out")
+
+
+class TestTopicDisQuant(tf.test.TestCase):
+    def test_initialization(self):
+        embedding_dim = 10
+        num_embeddings = 20
+        commitment_cost = 0.25
+
+        tdq = TopicDisQuant(embedding_dim, num_embeddings, commitment_cost)
+
+        self.assertEqual(tdq.embedding_dim, embedding_dim)
+        self.assertEqual(tdq.num_embeddings, num_embeddings)
+        self.assertEqual(tdq.commitment_cost, commitment_cost)
+        self.assertTrue(isinstance(tdq.maybe_embedding_matrix, tf.Variable))
+        self.assertEqual(
+            tdq.maybe_embedding_matrix.shape.as_list(), [num_embeddings, embedding_dim]
+        )  # TODO: this was [embedding_dim, num_embeddings]
+
+        tdq.maybe_embedding_matrix = tf_debug(tdq.maybe_embedding_matrix, "keep")
+
+        expected_embedding_matrix = [
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            [
+                0.09162027,
+                0.21204221,
+                0.32615584,
+                -0.11078015,
+                0.24337202,
+                0.19897145,
+                0.39131552,
+                0.39388168,
+                0.4274729,
+                -0.36743802,
+            ],
+            [
+                -0.22212353,
+                -0.36713466,
+                -0.52108943,
+                0.4401281,
+                0.22639674,
+                0.3024249,
+                0.26822084,
+                -0.48262185,
+                -0.05199763,
+                0.49165583,
+            ],
+            [
+                0.1306575,
+                -0.061934143,
+                -0.19612336,
+                -0.27101946,
+                0.12554097,
+                0.19340438,
+                -0.3150789,
+                0.21211624,
+                -0.049551994,
+                0.026616156,
+            ],
+            [
+                -0.017760396,
+                -0.1413633,
+                0.16142529,
+                -0.045005202,
+                -0.23712814,
+                -0.5415412,
+                0.29591304,
+                -0.50508505,
+                -0.40171874,
+                -0.06551796,
+            ],
+            [
+                0.40718067,
+                0.13930118,
+                -0.43893322,
+                -0.12183684,
+                -0.53747606,
+                0.44685817,
+                0.12958145,
+                0.16221988,
+                -0.16969511,
+                -0.0865702,
+            ],
+            [
+                -0.19360852,
+                -0.17063913,
+                0.20461833,
+                0.128007,
+                -0.028867722,
+                -0.035159707,
+                -0.44927338,
+                -0.4175684,
+                -0.467711,
+                0.46463394,
+            ],
+            [
+                0.26711804,
+                -0.3061272,
+                -0.31804222,
+                0.06871563,
+                0.5197791,
+                -0.3447575,
+                -0.40593618,
+                -0.4806441,
+                -0.43038955,
+                -0.36826122,
+            ],
+            [
+                0.38771236,
+                0.045807004,
+                -0.528653,
+                0.35553014,
+                0.33580428,
+                -0.43672487,
+                0.104386866,
+                -0.14273733,
+                -0.3958457,
+                -0.4888562,
+            ],
+            [
+                0.503811,
+                0.1618458,
+                -0.1468789,
+                0.026929677,
+                0.2996443,
+                0.25494063,
+                0.18318701,
+                0.46656263,
+                0.51119757,
+                0.41626287,
+            ],
+            [
+                -0.47605565,
+                0.3618819,
+                0.3645941,
+                -0.54115653,
+                0.07553363,
+                0.39952016,
+                -0.46746078,
+                0.43313396,
+                0.13382113,
+                -0.47895142,
+            ],
+        ]
+        expected_embedding_matrix = tf.compat.v1.convert_to_tensor(expected_embedding_matrix, dtype=tf.float32)
+
+        self.assertAllClose(expected_embedding_matrix, tdq.maybe_embedding_matrix)
+
+    # def test_forward(self):
+        # tdq = TopicDisQuant(embedding_dim=10, num_embeddings=20, commitment_cost=0.25)
+        # inputs = tf.random.uniform([100, 10], dtype=tf.float32, seed=42)
+
+        # result = tdq.forward(inputs)
+        # self.assertEqual(result.quantize.shape, inputs.shape)
+
+    # def test_quantize(self):
+        # embedding_dim = 10
+
+        # tdq = TopicDisQuant(embedding_dim=embedding_dim, num_embeddings=20, commitment_cost=0.25)
+        # encoding_indices = tf.constant([0, 1, 2, 3, 4], dtype=tf.int32)
+
+        # quantized_output = tdq.quantize(encoding_indices)
+
+        # self.assertEqual(quantized_output.shape.as_list(), [len(encoding_indices), embedding_dim])  # this was [5, 20]
+        # self.assertTrue(isinstance(quantized_output, tf.Tensor))
 
 
 class NQTM(object):
     @log_arguments
     def __init__(self, config):
         self.config = config
-        self.active_fct = config['active_fct']
-        self.keep_prob = config['keep_prob']
-        self.word_sample_size = config['word_sample_size']
-        self.topic_num = config['topic_num']
+        self.active_fct = config["active_fct"]
+        self.keep_prob = config["keep_prob"]
+        self.word_sample_size = config["word_sample_size"]
+        self.topic_num = config["topic_num"]
         self.exclude_topt = 1
         self.select_topic_num = int(self.topic_num - 2)
 
         self.sess = None
 
-        self.topic_dis_quant = TopicDisQuant(self.topic_num, self.topic_num, commitment_cost=config['commitment_cost'])
+        self.topic_dis_quant = TopicDisQuant(self.topic_num, self.topic_num, commitment_cost=config["commitment_cost"])
 
         self.init()
 
         # self.sess = tf.compat.v1.Session(config=sess_config)
         # self.sess.run(tf.compat.v1.global_variables_initializer())
 
-    def set_session(self, session: tf.compat.v1.Session):
-        self.sess = session
-
     @log_arguments
     def init(self):
-        self.x = tf.compat.v1.placeholder(tf.float32, shape=(None, self.config['vocab_size']))
-        self.w_omega = tf.compat.v1.placeholder(dtype=tf.float32, name='w_omega')
+        self.x = tf.compat.v1.placeholder(tf.float32, shape=(None, self.config["vocab_size"]))
+        self.w_omega = tf.compat.v1.placeholder(dtype=tf.float32, name="w_omega")
 
         self.network_weights = self._initialize_weights()
-        self.beta = self.network_weights['weights_gener']['h2']
+        self.beta = self.network_weights["weights_gener"]["h2"]
 
         self.forward(self.x)
 
     @log_arguments
     def _initialize_weights(self):
         all_weights = dict()
-        all_weights['weights_recog'] = {
-            'h1': tf.compat.v1.get_variable('h1', [self.config['vocab_size'], self.config['layer1']]),
-            'h2': tf.compat.v1.get_variable('h2', [self.config['layer1'], self.config['layer2']]),
-            'out': tf.compat.v1.get_variable('out', [self.config['layer2'], self.topic_num]),
+        all_weights["weights_recog"] = {
+            "h1": tf.compat.v1.get_variable("h1", [self.config["vocab_size"], self.config["layer1"]]),
+            "h2": tf.compat.v1.get_variable("h2", [self.config["layer1"], self.config["layer2"]]),
+            "out": tf.compat.v1.get_variable("out", [self.config["layer2"], self.topic_num]),
         }
-        all_weights['biases_recog'] = {
-            'b1': tf.Variable(tf.zeros([self.config['layer1']], dtype=tf.float32)),
-            'b2': tf.Variable(tf.zeros([self.config['layer2']], dtype=tf.float32)),
-            'out': tf.Variable(tf.zeros([self.topic_num], dtype=tf.float32)),
+        all_weights["biases_recog"] = {
+            "b1": tf.compat.v1.Variable(tf.zeros([self.config["layer1"]], dtype=tf.float32)),
+            "b2": tf.compat.v1.Variable(tf.zeros([self.config["layer2"]], dtype=tf.float32)),
+            "out": tf.compat.v1.Variable(tf.zeros([self.topic_num], dtype=tf.float32)),
         }
-        all_weights['weights_gener'] = {
-            'h2': tf.compat.v1.Variable(xavier_init(self.topic_num, self.config['vocab_size']))
-        }
-        all_weights['biases_gener'] = {
-            'b2': tf.compat.v1.Variable(tf.zeros([self.config['vocab_size']], dtype=tf.float32))
-        }
+        all_weights["weights_gener"] = {"h2": tf.compat.v1.Variable(xavier_init(self.topic_num, self.config["vocab_size"]))}
+        all_weights["biases_gener"] = {"b2": tf.compat.v1.Variable(tf.zeros([self.config["vocab_size"]], dtype=tf.float32))}
+
+        for category, variable in all_weights.items():
+            for name, variable in variable.items():
+                tf_debug(variable, f"{category}.{name}")
+
         return all_weights
 
     # - The model first encodes the input data through its encoder method.
-    # - Input data (x) is passed through fully connected layers, where each layer 
-    # involves a matrix multiplication followed by an addition of a bias term and 
+    # - Input data (x) is passed through fully connected layers, where each layer
+    # involves a matrix multiplication followed by an addition of a bias term and
     # an activation function (self.active_fct).
-    # - After the last fully connected layer, batch normalization is applied, and 
-    # the output is transformed using a softmax function to generate a topic 
-    # distribution vector (theta). This vector represents the probability 
+    # - After the last fully connected layer, batch normalization is applied, and
+    # the output is transformed using a softmax function to generate a topic
+    # distribution vector (theta). This vector represents the probability
     # distribution over a predefined number of topics.
     @log_arguments
     def encoder(self, x: tf.Tensor) -> tf.Tensor:
+        x = tf_debug(x, "x")
+
         weights = self.network_weights["weights_recog"]
-        biases = self.network_weights['biases_recog']
-        layer_1 = self.active_fct(tf.add(tf.matmul(x, weights['h1']), biases['b1']))
-        layer_2 = self.active_fct(tf.add(tf.matmul(layer_1, weights['h2']), biases['b2']))
+        biases = self.network_weights["biases_recog"]
+        layer_1 = self.active_fct(tf.add(tf.matmul(x, weights["h1"]), biases["b1"]))
+        layer_2 = self.active_fct(tf.add(tf.matmul(layer_1, weights["h2"]), biases["b2"]))
         layer_do = tf.nn.dropout(layer_2, rate=(1 - self.keep_prob))
-        z_mean = BatchNormalization()(tf.add(tf.matmul(layer_do, weights['out']), biases['out']))
+        z_mean = BatchNormalization()(tf.add(tf.matmul(layer_do, weights["out"]), biases["out"]))
 
         theta = tf.compat.v1.nn.softmax(z_mean)
-
-        logger.debug('Theta:', theta)
+        theta = tf_debug(theta, "theta")
 
         return theta
 
@@ -285,19 +530,43 @@ class NQTM(object):
     # distribution (theta).
     @log_arguments
     def decoder(self, theta: tf.Tensor) -> tf.Tensor:
-        x_recon = BatchNormalization()(tf.add(tf.matmul(theta, self.network_weights["weights_gener"]['h2']), 0.0))
+        theta = tf_debug(theta, "theta")
+
+        x_recon = BatchNormalization()(tf.add(tf.matmul(theta, self.network_weights["weights_gener"]["h2"]), 0.0))
         x_recon = tf.compat.v1.nn.softmax(x_recon)
+        x_recon = tf_debug(x_recon, "x_recon")
+
         return x_recon
 
     @log_arguments
     def negative_sampling(self, theta: tf.Tensor) -> tf.Tensor:
-        logits = tf.compat.v1.cast(tf.compat.v1.less(theta, tf.compat.v1.reduce_min(tf.compat.v1.nn.top_k(theta, k=self.exclude_topt).values, axis=1, keepdims=True)), tf.float32)
-        topic_indices = tf.compat.v1.one_hot(tf.compat.v1.random.categorical(logits, self.select_topic_num), depth=theta.shape[1])  # N*1*K
-        indices = tf.compat.v1.nn.top_k(tf.compat.v1.tensordot(topic_indices, self.beta, axes=1), self.word_sample_size).indices
+        theta = tf_debug(theta, "theta")
+
+        logits = tf.compat.v1.cast(
+            tf.compat.v1.less(
+                theta,
+                tf.compat.v1.reduce_min(
+                    tf.compat.v1.nn.top_k(theta, k=self.exclude_topt).values,
+                    axis=1,
+                    keepdims=True,
+                ),
+            ),
+            tf.float32,
+        )
+        topic_indices = tf.compat.v1.one_hot(
+            tf.compat.v1.random.categorical(logits, self.select_topic_num),
+            depth=theta.shape[1],
+        )  # N*1*K
+        indices = tf.compat.v1.nn.top_k(
+            tf.compat.v1.tensordot(topic_indices, self.beta, axes=1),
+            self.word_sample_size,
+        ).indices
         indices = tf.compat.v1.reshape(indices, shape=(-1, self.select_topic_num * self.word_sample_size))
 
         _m = tf.compat.v1.one_hot(indices, depth=self.beta.shape[1])
         _m = tf.compat.v1.reduce_sum(_m, axis=1)
+        _m = tf_debug(_m, "_m")
+
         return _m
 
     # Computes the forward pass of the model. It encodes the input, applies
@@ -305,20 +574,29 @@ class NQTM(object):
     # which includes an auto-encoding error and a quantization loss.
     @log_arguments
     def forward(self, x: tf.Tensor):
+        x = tf_debug(x, "x")
+
         self.theta_e = self.encoder(x)
         quantization_output = self.topic_dis_quant.forward(self.theta_e)
         self.theta_q = quantization_output.quantize
         self.x_recon = self.decoder(self.theta_q)
 
         if self.word_sample_size > 0:
-            logging.info('==> word_sample_size > 0')
+            # logger.info('==> word_sample_size > 0')
+
             _n_samples = self.negative_sampling(self.theta_q)
             negative_error = -self.w_omega * _n_samples * tf.compat.v1.math.log(1 - self.x_recon)
-            self.auto_encoding_error = tf.compat.v1.reduce_mean(tf.compat.v1.reduce_sum(-x * tf.compat.v1.math.log(self.x_recon) + negative_error, axis=1))
+            self.auto_encoding_error: float = tf.compat.v1.reduce_mean(
+                tf.compat.v1.reduce_sum(-x * tf.compat.v1.math.log(self.x_recon) + negative_error, axis=1)
+            )
             self.loss = self.auto_encoding_error + quantization_output.loss
         else:
-            self.auto_encoding_error = tf.compat.v1.reduce_mean(tf.compat.v1.reduce_sum(-x * tf.compat.v1.math.log(self.x_recon), axis=1))
+            self.auto_encoding_error: float = tf.compat.v1.reduce_mean(tf.compat.v1.reduce_sum(-x * tf.compat.v1.math.log(self.x_recon), axis=1))
             self.loss = self.auto_encoding_error + quantization_output.loss
 
-        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config['learning_rate'])
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=self.config["learning_rate"])
         self.train_op = optimizer.minimize(self.loss)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -11,6 +11,7 @@ keras = "*"
 # tensorflow-macos = "*"
 tensorflow-metal = "*"
 wandb = "*"
+black = "*"
 
 [dev-packages]
 

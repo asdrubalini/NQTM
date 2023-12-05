@@ -108,6 +108,13 @@ if __name__ == "__main__":
     tf.compat.v1.disable_v2_behavior()
     tf.compat.v1.disable_resource_variables()
     tf.compat.v1.random.set_random_seed(42)
+    tf.compat.v1.set_random_seed(42)
+
+    # tf.debugging.experimental.enable_dump_debug_info(
+        # "/Volumes/SanDisk/tf_debug/",
+        # tensor_debug_mode="NO_TENSOR",
+        # circular_buffer_size=-1
+    # )
 
     config = dict()
     config.update(vars(args))
@@ -125,8 +132,6 @@ if __name__ == "__main__":
 
     sess = tf.compat.v1.Session(config=sess_config)
     sess.run(tf.compat.v1.global_variables_initializer())
-
-    model.set_session(sess)
 
     with sess.as_default():
         train(model, train_data, vocab, config, sess)
