@@ -53,7 +53,7 @@ def print_top_words(beta, feature_names, n_top_words=15):
             file.write(line + '\n')
 
 
-def get_theta(model, x):
+def get_theta(model, x, sess: tf.compat.v1.Session):
     data_size = x.shape[0]
     batch_size = args.batch_size
     train_theta = np.zeros((data_size, args.topic_num))
@@ -61,12 +61,11 @@ def get_theta(model, x):
         start = i * batch_size
         end = (i + 1) * batch_size
         data_batch = x[start:end]
-        train_theta[start:end] = model.sess.run(model.theta_e, feed_dict={model.x: data_batch})
-    train_theta[-batch_size:] = model.sess.run(model.theta_e, feed_dict={model.x: x[-batch_size:]})
+        train_theta[start:end] = sess.run(model.theta_e, feed_dict={model.x: data_batch})
+    train_theta[-batch_size:] = sess.run(model.theta_e, feed_dict={model.x: x[-batch_size:]})
     return train_theta
 
-
-def train(model, train_data, vocab, config):
+def train(model: NQTM, train_data, vocab, config: dict, sess: tf.compat.v1.Session):
     total_batch = int(train_data.shape[0] / args.batch_size)
     minibatches = create_minibatch(train_data)
     op = [model.train_op, model.loss]
@@ -74,32 +73,60 @@ def train(model, train_data, vocab, config):
     for epoch in range(args.epoch):
         omega = 0 if epoch < config['word_sample_epoch'] else 1.0
         train_loss = list()
+
         for i in range(total_batch):
             batch_data = minibatches.__next__()
             feed_dict = {model.x: batch_data, model.w_omega: omega}
-            _, batch_loss = model.sess.run(op, feed_dict=feed_dict)
+            _, batch_loss = sess.run(op, feed_dict=feed_dict)
             train_loss.append(batch_loss)
 
-        print('Epoch: ', '{:03d} loss: {:.3f}'.format(epoch + 1, np.mean(train_loss)))
+        print('Epoch: {:03d} loss: {:.3f}'.format(epoch + 1, np.mean(train_loss)))
 
-    beta = model.sess.run((model.beta))
+    beta = sess.run((model.beta))
     print_top_words(beta, vocab)
 
-    train_theta = get_theta(model, train_data)
+    train_theta = get_theta(model, train_data, sess)
     np.save(os.path.join(args.output_dir, 'theta_K{}_{}th'.format(args.topic_num, args.test_index)), train_theta)
     np.save(os.path.join(args.output_dir, 'beta_K{}_{}th'.format(args.topic_num, args.test_index)), beta)
 
+def print_topic_words(beta, theta, feature_names, n_topic_selection=2, n_top_words=2):
+    top_words = list()
+    doc_topic_word = list()
+
+    for i in range(len(beta)):
+        top_words.append(' '.join([feature_names[j] for j in beta[i].argsort()[:-n_top_words - 1:-1]]))
+
+    for i in range(len(theta)):
+        doc_topic_word.append(' '.join([top_words[j] for j in theta[i].argsort()[:-n_topic_selection - 1:-1]]))
+
+    with open(os.path.join(args.output_dir, 'topic_words_new_T{}_K{}_{}th'.format(n_top_words, args.topic_num, args.test_index)), 'w') as file:
+        for line in doc_topic_word:
+            file.write(line + '\n')
+
 
 if __name__ == "__main__":
+    tf.compat.v1.enable_eager_execution()
+    tf.compat.v1.disable_v2_behavior()
+    tf.compat.v1.disable_resource_variables()
     tf.compat.v1.random.set_random_seed(42)
+    tf.compat.v1.set_random_seed(42)
 
     config = dict()
     config.update(vars(args))
-    config['active_fct'] = tf.nn.softplus
+    config['active_fct'] = tf.compat.v1.nn.softplus
 
     os.makedirs(args.output_dir, exist_ok=True)
 
     train_data, vocab = load_data(args.data_dir)
     config['vocab_size'] = len(vocab)
+
+    sess_config = tf.compat.v1.ConfigProto()
+    sess_config.gpu_options.allow_growth = True
+
     model = NQTM(config=config)
-    train(model, train_data, vocab, config)
+
+    sess = tf.compat.v1.Session(config=sess_config)
+    sess.run(tf.compat.v1.global_variables_initializer())
+
+    with sess.as_default():
+        train(model, train_data, vocab, config, sess)
